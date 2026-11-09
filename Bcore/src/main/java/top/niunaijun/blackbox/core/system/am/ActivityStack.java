@@ -138,6 +138,17 @@ public class ActivityStack {
         }
 
         
+        if (taskRecord == null) { // MULTICLONE_DUP_LAUNCH
+            ComponentName target = ComponentUtils.toComponentName(activityInfo);
+            synchronized (mLaunchingActivities) {
+                for (ActivityRecord launching : mLaunchingActivities) {
+                    if (!launching.finished && launching.userId == userId && target.equals(launching.component)) {
+                        Slog.w(TAG, "ignoring duplicate launch of " + target);
+                        return 0;
+                    }
+                }
+            }
+        }
         if (taskRecord == null || taskRecord.needNewTask()) {
             return startActivityInNewTaskLocked(userId, intent, activityInfo, resultTo, launchModeFlags);
         }
@@ -385,7 +396,7 @@ public class ActivityStack {
         synchronized (mLaunchingActivities) {
             mLaunchingActivities.add(targetRecord);
             Message obtain = Message.obtain(mHandler, LAUNCH_TIME_OUT, targetRecord);
-            mHandler.sendMessageDelayed(obtain, 2000);
+            mHandler.sendMessageDelayed(obtain, 10000); // MULTICLONE_LAUNCH_TIMEOUT
         }
         return targetRecord;
     }
@@ -549,5 +560,38 @@ public class ActivityStack {
         }
         mTasks.clear();
         mTasks.putAll(newTacks);
+        // MULTICLONE_DEAD_TASKS
+        java.util.Iterator<Map.Entry<Integer, TaskRecord>> it = mTasks.entrySet().iterator();
+        while (it.hasNext()) {
+            Map.Entry<Integer, TaskRecord> entry = it.next();
+            TaskRecord task = entry.getValue();
+            synchronized (task.activities) {
+                java.util.Iterator<ActivityRecord> records = task.activities.iterator();
+                while (records.hasNext()) {
+                    if (!isProcessAlive(records.next().processRecord)) records.remove();
+                }
+                if (!task.activities.isEmpty()) continue;
+            }
+            it.remove();
+            removeSystemTask(entry.getKey());
+        }
+    }
+
+    private static boolean isProcessAlive(ProcessRecord p) {
+        return p != null && p.bActivityThread != null && p.bActivityThread.asBinder().isBinderAlive();
+    }
+
+    @SuppressWarnings("deprecation")
+    private void removeSystemTask(int taskId) {
+        for (ActivityManager.AppTask task : mAms.getAppTasks()) {
+            try {
+                if (task.getTaskInfo().id == taskId) {
+                    task.finishAndRemoveTask();
+                    Slog.d(TAG, "removed dead task " + taskId);
+                    return;
+                }
+            } catch (Throwable ignored) {
+            }
+        }
     }
 }
