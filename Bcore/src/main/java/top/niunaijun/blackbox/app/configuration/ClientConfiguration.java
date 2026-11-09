@@ -30,6 +30,14 @@ public abstract class ClientConfiguration {
         return false;
     }
 
+    /**
+     * Sirve la ubicación de Google Play Services de las apps clonadas con el GMS real del dispositivo en vez del GMS
+     * virtual. Las apps con ubicación falsa siguen usando el GMS virtual. MULTICLONE_HOST_GMS_LOCATION_CONFIG
+     */
+    public boolean isUseHostGmsLocation() {
+        return false;
+    }
+
     
     public boolean requestInstallPackage(File file, int userId) {
         return false;

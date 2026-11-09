@@ -1265,6 +1265,11 @@ public class BlackBoxCore extends ClientConfiguration {
         return mClientConfiguration.isDisableFlagSecure();
     }
 
+    @Override
+    public boolean isUseHostGmsLocation() { // MULTICLONE_HOST_GMS_LOCATION_CONFIG
+        return mClientConfiguration != null && mClientConfiguration.isUseHostGmsLocation();
+    }
+
 
 
     @Override
