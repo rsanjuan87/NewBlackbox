@@ -1140,6 +1140,33 @@ public class BActivityThread extends IBActivityThread.Stub {
                         true);
             } else if (BRActivityThreadQ.get(mainThread)._check_handleNewIntent(null, null) != null) {
                 BRActivityThreadQ.get(mainThread).handleNewIntent(token, Collections.singletonList(newIntent));
+            } else { // MULTICLONE_NEW_INTENT_S
+                Activity activity = getActivityByToken(token);
+                if (activity != null) {
+                    newIntent.setExtrasClassLoader(activity.getClassLoader());
+                    Instrumentation instrumentation = BRActivityThread.get(mainThread).mInstrumentation();
+                    if (isStopped(activity)) {
+                        // Android lo entrega tras onStart y antes de onResume: las apps que solo navegan si ya
+                        // están en STARTED (TRIBBU) descartaban el enlace si llegaba con la actividad detenida.
+                        activity.registerActivityLifecycleCallbacks(new android.app.Application.ActivityLifecycleCallbacks() {
+                            @Override
+                            public void onActivityPostStarted(Activity a) {
+                                a.unregisterActivityLifecycleCallbacks(this);
+                                instrumentation.callActivityOnNewIntent(a, newIntent);
+                            }
+
+                            @Override public void onActivityCreated(Activity a, android.os.Bundle b) {}
+                            @Override public void onActivityStarted(Activity a) {}
+                            @Override public void onActivityResumed(Activity a) {}
+                            @Override public void onActivityPaused(Activity a) {}
+                            @Override public void onActivityStopped(Activity a) {}
+                            @Override public void onActivitySaveInstanceState(Activity a, android.os.Bundle b) {}
+                            @Override public void onActivityDestroyed(Activity a) {}
+                        });
+                    } else {
+                        instrumentation.callActivityOnNewIntent(activity, newIntent);
+                    }
+                }
             }
         });
     }
@@ -1175,6 +1202,17 @@ public class BActivityThread extends IBActivityThread.Stub {
                                 + " in " + mReceiver);
             }
         });
+    }
+
+    /** Activity.mStopped (oculto); si no se puede leer, se considera arrancada. MULTICLONE_IS_STOPPED */
+    private static boolean isStopped(Activity activity) {
+        try {
+            java.lang.reflect.Field f = Activity.class.getDeclaredField("mStopped");
+            f.setAccessible(true);
+            return f.getBoolean(activity);
+        } catch (Throwable e) {
+            return false;
+        }
     }
 
     public static Activity getActivityByToken(IBinder token) {

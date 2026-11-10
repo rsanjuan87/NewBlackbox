@@ -161,6 +161,13 @@ public class ActivityStack {
             synchronized (mLaunchingActivities) {
                 for (ActivityRecord launching : mLaunchingActivities) {
                     if (!launching.finished && launching.userId == userId && target.equals(launching.component)) {
+                        if (activityInfo.launchMode != ActivityInfo.LAUNCH_MULTIPLE) { // MULTICLONE_QUEUE_NEW_INTENT
+                            Slog.d(TAG, "queueing new intent for launching " + target + ": " + intent + " flags=0x" + Integer.toHexString(intent.getFlags()));
+                            synchronized (launching.pendingNewIntents) {
+                                launching.pendingNewIntents.add(intent);
+                            }
+                            return 0;
+                        }
                         Slog.w(TAG, "ignoring duplicate launch of " + target);
                         return 0;
                     }
@@ -171,7 +178,7 @@ public class ActivityStack {
             return startActivityInNewTaskLocked(userId, intent, activityInfo, resultTo, launchModeFlags);
         }
         
-        mAms.moveTaskToFront(taskRecord.id, 0);
+        // MULTICLONE_NEW_INTENT_BEFORE_FRONT: la tarea se trae al frente en cada salida, después de entregar el intent
 
         boolean notStartToFront = false;
         if (clearTop || singleTop || clearTask) {
@@ -182,8 +189,10 @@ public class ActivityStack {
                 && ComponentUtils.intentFilterEquals(taskRecord.rootIntent, intent)
                 && taskRecord.rootIntent.getFlags() == intent.getFlags();
 
-        if (startTaskToFront)
+        if (startTaskToFront) {
+            mAms.moveTaskToFront(taskRecord.id, 0); // MULTICLONE_FRONT_SAME_TASK
             return 0;
+        }
 
         ActivityRecord topActivityRecord = taskRecord.getTopActivityRecord();
         ActivityRecord targetActivityRecord = findActivityRecordByComponentName(userId, ComponentUtils.toComponentName(activityInfo));
@@ -267,10 +276,13 @@ public class ActivityStack {
         if (newIntentRecord != null) {
             
             deliverNewIntentLocked(newIntentRecord, intent);
+            mAms.moveTaskToFront(taskRecord.id, 0); // MULTICLONE_FRONT_AFTER_NEW_INTENT
             return 0;
         } else if (ignore) {
+            mAms.moveTaskToFront(taskRecord.id, 0);
             return 0;
         }
+        mAms.moveTaskToFront(taskRecord.id, 0);
 
         if (resultTo == null) {
             ActivityRecord top = taskRecord.getTopActivityRecord();
@@ -523,6 +535,14 @@ public class ActivityStack {
             record.task = taskRecord;
             taskRecord.addTopActivity(record);
             Log.d(TAG, "onActivityCreated : " + record.component.toString());
+        }
+        java.util.List<Intent> pending; // MULTICLONE_FLUSH_NEW_INTENTS
+        synchronized (record.pendingNewIntents) {
+            pending = new java.util.ArrayList<>(record.pendingNewIntents);
+            record.pendingNewIntents.clear();
+        }
+        for (Intent intent : pending) {
+            deliverNewIntentLocked(record, intent);
         }
     }
 

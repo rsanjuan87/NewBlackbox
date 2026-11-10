@@ -20,6 +20,8 @@ public class ActivityRecord extends Binder {
     public int userId;
     public boolean finished;
     public ProcessRecord processRecord;
+    /** Intents que llegaron mientras la actividad se creaba; se entregan con onNewIntent. MULTICLONE_PENDING_NEW_INTENTS */
+    public final java.util.List<Intent> pendingNewIntents = new java.util.ArrayList<>();
 
     public static ActivityRecord create(Intent intent, ActivityInfo info, IBinder resultTo, int userId) {
         ActivityRecord record = new ActivityRecord();
