@@ -14,27 +14,39 @@ import top.niunaijun.blackbox.utils.DrawableUtils;
 
 public class TaskDescriptionCompat {
     public static ActivityManager.TaskDescription fix(ActivityManager.TaskDescription td) {
-        String label = td.getLabel();
-        Bitmap icon = td.getIcon();
-
-        if (label != null && icon != null)
+        String label = customLabel();
+        Bitmap icon = customIcon();
+        if (label == null && icon == null && td.getLabel() != null && td.getIcon() != null)
             return td;
 
-        label = getTaskDescriptionLabel(BlackBoxCore.getUserId(), getApplicationLabel());
-        
-        
-        
-        
-
-        
-        
-        
-        td = new ActivityManager.TaskDescription(label, null, td.getPrimaryColor());
-        return td;
+        if (label == null)
+            label = td.getLabel() != null ? td.getLabel() : getTaskDescriptionLabel(BlackBoxCore.getUserId(), getApplicationLabel());
+        if (icon == null)
+            icon = td.getIcon();
+        return new ActivityManager.TaskDescription(label, icon, td.getPrimaryColor());
     }
 
+    /** Nombre en «Recientes»: el que da el host para este clon o, si no da ninguno, «[B<usuario>]<app>». */
     public static String getTaskDescriptionLabel(int userId, CharSequence label) {
-        return String.format(Locale.CHINA, "[B%d]%s", userId, label);
+        String custom = customLabel();
+        return custom != null ? custom : String.format(Locale.CHINA, "[B%d]%s", userId, label);
+    }
+
+    /** Icono en «Recientes» que da el host para este clon, o null. */
+    public static Bitmap customIcon() {
+        try {
+            return BlackBoxCore.get().getTaskIcon(BlackBoxCore.getAppPackageName(), BlackBoxCore.getUserId());
+        } catch (Throwable e) {
+            return null;
+        }
+    }
+
+    private static String customLabel() {
+        try {
+            return BlackBoxCore.get().getTaskLabel(BlackBoxCore.getAppPackageName(), BlackBoxCore.getUserId());
+        } catch (Throwable e) {
+            return null;
+        }
     }
 
     private static CharSequence getApplicationLabel() {

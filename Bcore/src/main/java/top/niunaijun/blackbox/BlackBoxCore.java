@@ -1270,6 +1270,16 @@ public class BlackBoxCore extends ClientConfiguration {
         return mClientConfiguration != null && mClientConfiguration.isUseHostGmsLocation();
     }
 
+    @Override
+    public String getTaskLabel(String packageName, int userId) {
+        return mClientConfiguration == null ? null : mClientConfiguration.getTaskLabel(packageName, userId);
+    }
+
+    @Override
+    public android.graphics.Bitmap getTaskIcon(String packageName, int userId) {
+        return mClientConfiguration == null ? null : mClientConfiguration.getTaskIcon(packageName, userId);
+    }
+
 
 
     @Override

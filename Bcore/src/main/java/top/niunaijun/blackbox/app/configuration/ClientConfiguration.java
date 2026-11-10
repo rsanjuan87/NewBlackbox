@@ -1,5 +1,7 @@
 package top.niunaijun.blackbox.app.configuration;
 
+import android.graphics.Bitmap;
+
 import java.io.File;
 
 
@@ -38,6 +40,15 @@ public abstract class ClientConfiguration {
         return false;
     }
 
+    /** Nombre del clon {@code packageName} del usuario {@code userId} en «Recientes»; null usa el del motor. */
+    public String getTaskLabel(String packageName, int userId) {
+        return null;
+    }
+
+    /** Icono del clon {@code packageName} del usuario {@code userId} en «Recientes»; null usa el de la app. */
+    public Bitmap getTaskIcon(String packageName, int userId) {
+        return null;
+    }
     
     public boolean requestInstallPackage(File file, int userId) {
         return false;

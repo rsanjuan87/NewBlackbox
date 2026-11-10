@@ -55,8 +55,8 @@ public class ActivityCompat {
                     String label = TaskDescriptionCompat.getTaskDescriptionLabel(
                             BlackBoxCore.getUserId(), applicationInfo.loadLabel(pm));
 
-                    Bitmap icon = null;
-                    Drawable drawable = getActivityIcon(activity);
+                    Bitmap icon = TaskDescriptionCompat.customIcon();
+                    Drawable drawable = icon == null ? getActivityIcon(activity) : null;
                     if (drawable != null) {
                         ActivityManager am = (ActivityManager) baseContext.getSystemService(Context.ACTIVITY_SERVICE);
                         int iconSize = am.getLauncherLargeIconSize();
