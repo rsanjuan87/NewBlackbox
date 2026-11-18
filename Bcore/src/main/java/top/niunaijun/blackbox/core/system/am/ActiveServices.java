@@ -8,6 +8,7 @@ import android.content.Intent;
 import android.content.pm.ResolveInfo;
 import android.content.pm.ServiceInfo;
 import android.os.Binder;
+import android.os.Build;
 import android.os.IBinder;
 import android.os.RemoteException;
 import android.util.Log;
@@ -26,6 +27,7 @@ import top.niunaijun.blackbox.core.system.pm.BPackageManagerService;
 import top.niunaijun.blackbox.entity.UnbindRecord;
 import top.niunaijun.blackbox.entity.am.RunningServiceInfo;
 import top.niunaijun.blackbox.proxy.ProxyManifest;
+import top.niunaijun.blackbox.proxy.ProxyServiceForegroundPolicy;
 import top.niunaijun.blackbox.proxy.record.ProxyServiceRecord;
 
 
@@ -52,11 +54,19 @@ public class ActiveServices {
 
         runningServiceRecord.getAndIncrementStartId();
         final Intent stubServiceIntent = createStubServiceIntent(intent, serviceInfo, processRecord, runningServiceRecord);
+        final boolean startForeground = ProxyServiceForegroundPolicy.shouldPromote(requireForeground, Build.VERSION.SDK_INT);
+        if (startForeground) {
+            stubServiceIntent.putExtra(ProxyServiceForegroundPolicy.EXTRA_START_FOREGROUND, true);
+        }
         new Thread(new Runnable() {
             @Override
             public void run() {
                 try {
-                    BlackBoxCore.getContext().startService(stubServiceIntent);
+                    if (startForeground) {
+                        BlackBoxCore.getContext().startForegroundService(stubServiceIntent);
+                    } else {
+                        BlackBoxCore.getContext().startService(stubServiceIntent);
+                    }
                 } catch (Throwable e) {
                     e.printStackTrace();
                 }

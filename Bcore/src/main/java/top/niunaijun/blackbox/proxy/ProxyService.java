@@ -1,8 +1,11 @@
 package top.niunaijun.blackbox.proxy;
 
+import android.app.NotificationChannel;
+import android.app.NotificationManager;
 import android.app.Service;
 import android.content.Intent;
 import android.content.res.Configuration;
+import android.os.Build;
 import android.os.IBinder;
 
 import androidx.annotation.Nullable;
@@ -10,11 +13,21 @@ import androidx.core.app.NotificationCompat;
 
 import top.niunaijun.blackbox.BlackBoxCore;
 import top.niunaijun.blackbox.app.dispatcher.AppServiceDispatcher;
-import top.niunaijun.blackbox.utils.compat.BuildCompat;
 
 
 public class ProxyService extends Service {
     public static final String TAG = "StubService";
+
+    @Override
+    public void onCreate() {
+        super.onCreate();
+        AppServiceDispatcher dispatcher = AppServiceDispatcher.get();
+        dispatcher.setNoForegroundServicesListener(() -> {
+            if (!dispatcher.hasForegroundServices()) {
+                stopForeground(true);
+            }
+        });
+    }
 
     @Nullable
     @Override
@@ -24,14 +37,25 @@ public class ProxyService extends Service {
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
-        AppServiceDispatcher.get().onStartCommand(intent, flags, startId);
+        boolean startForeground = intent != null
+                && intent.getBooleanExtra(ProxyServiceForegroundPolicy.EXTRA_START_FOREGROUND, false);
+        if (startForeground) {
+            showNotification();
+        }
+        AppServiceDispatcher dispatcher = AppServiceDispatcher.get();
+        dispatcher.onStartCommand(intent, flags, startId);
+        if (ProxyServiceForegroundPolicy.shouldDemote(startForeground, dispatcher.hasForegroundServices())) {
+            stopForeground(true);
+        }
         return START_NOT_STICKY;
     }
 
     @Override
     public void onDestroy() {
         super.onDestroy();
-        AppServiceDispatcher.get().onDestroy();
+        AppServiceDispatcher dispatcher = AppServiceDispatcher.get();
+        dispatcher.setNoForegroundServicesListener(null);
+        dispatcher.onDestroy();
     }
 
     @Override
@@ -59,11 +83,31 @@ public class ProxyService extends Service {
     }
 
     private void showNotification() {
-        NotificationCompat.Builder builder = new NotificationCompat.Builder(getApplicationContext(), getPackageName() + ".blackbox_proxy")
-                .setPriority(NotificationCompat.PRIORITY_MAX);
-        if (BuildCompat.isOreo()) {
-            startForeground(BlackBoxCore.getHostPkg().hashCode(), builder.build());
+        String channelId = getPackageName() + ".blackbox_proxy";
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            NotificationChannel channel = new NotificationChannel(
+                    channelId, "MultiClone", NotificationManager.IMPORTANCE_LOW);
+            channel.setSound(null, null);
+            channel.enableVibration(false);
+            channel.setShowBadge(false);
+            NotificationManager notificationManager = getSystemService(NotificationManager.class);
+            notificationManager.createNotificationChannel(channel);
         }
+        NotificationCompat.Builder builder = new NotificationCompat.Builder(getApplicationContext(), channelId)
+                .setSmallIcon(android.R.drawable.sym_def_app_icon)
+                .setContentTitle("MultiClone")
+                .setContentText("Un servicio de una app clonada está activo")
+                .setPriority(NotificationCompat.PRIORITY_LOW)
+                .setOngoing(true)
+                .setAutoCancel(false)
+                .setDefaults(0)
+                .setSound(null)
+                .setVibrate(new long[0])
+                .setOnlyAlertOnce(true);
+        int proxyIndex = Integer.parseInt(getClass().getSimpleName().substring(1));
+        int notificationId = ProxyServiceForegroundPolicy.notificationId(
+                proxyIndex, BlackBoxCore.getHostPkg().hashCode());
+        startForeground(notificationId, builder.build());
     }
 
     public static class P0 extends ProxyService {

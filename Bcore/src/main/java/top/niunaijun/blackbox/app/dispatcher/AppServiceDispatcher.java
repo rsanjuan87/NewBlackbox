@@ -14,6 +14,7 @@ import top.niunaijun.blackbox.BlackBoxCore;
 import top.niunaijun.blackbox.app.BActivityThread;
 import top.niunaijun.blackbox.entity.ServiceRecord;
 import top.niunaijun.blackbox.entity.UnbindRecord;
+import top.niunaijun.blackbox.proxy.ProxyServiceForegroundPolicy;
 import top.niunaijun.blackbox.proxy.record.ProxyServiceRecord;
 
 import static android.app.Service.START_NOT_STICKY;
@@ -32,6 +33,27 @@ public class AppServiceDispatcher {
     }
 
     private final Handler mHandler = BlackBoxCore.get().getHandler();
+    private final ProxyServiceForegroundTracker<Intent.FilterComparison> mForegroundTracker = new ProxyServiceForegroundTracker<>();
+    private Runnable mNoForegroundServicesListener;
+
+    public void setNoForegroundServicesListener(Runnable listener) {
+        mNoForegroundServicesListener = listener;
+    }
+
+    public boolean hasForegroundServices() {
+        return mForegroundTracker.hasForegroundServices();
+    }
+
+    private void removeForegroundService(Intent.FilterComparison key) {
+        if (mForegroundTracker.stop(key)) {
+            mHandler.post(() -> {
+                Runnable listener = mNoForegroundServicesListener;
+                if (listener != null && !hasForegroundServices()) {
+                    listener.run();
+                }
+            });
+        }
+    }
 
     public IBinder onBind(Intent proxyIntent) {
         ProxyServiceRecord serviceRecord = ProxyServiceRecord.create(proxyIntent);
@@ -81,8 +103,19 @@ public class AppServiceDispatcher {
         stubRecord.mServiceIntent.setExtrasClassLoader(service.getClassLoader());
         ServiceRecord record = findRecord(stubRecord.mServiceIntent);
         record.setStartId(stubRecord.mStartId);
+        Intent.FilterComparison serviceKey = new Intent.FilterComparison(stubRecord.mServiceIntent);
+        boolean added = proxyIntent.getBooleanExtra(ProxyServiceForegroundPolicy.EXTRA_START_FOREGROUND, false)
+                && mForegroundTracker.start(serviceKey);
         try {
-            int i = service.onStartCommand(stubRecord.mServiceIntent, flags, stubRecord.mStartId);
+            int i;
+            try {
+                i = service.onStartCommand(stubRecord.mServiceIntent, flags, stubRecord.mStartId);
+            } catch (Throwable e) {
+                if (added) {
+                    removeForegroundService(serviceKey);
+                }
+                throw e;
+            }
             BlackBoxCore.getBActivityManager().onStartCommand(proxyIntent, stubRecord.mUserId);
             return i;
         } catch (Throwable e) {
@@ -102,6 +135,7 @@ public class AppServiceDispatcher {
             }
         }
         mService.clear();
+        mForegroundTracker.clear();
 
     }
 
@@ -168,7 +202,11 @@ public class AppServiceDispatcher {
             if (destroy || record.decreaseConnectionCount(intent)) {
                 boolean b = service.onUnbind(intent);
                 if (destroy) {
-                    service.onDestroy();
+                    try {
+                        service.onDestroy();
+                    } finally {
+                        removeForegroundService(new Intent.FilterComparison(intent));
+                    }
                     BlackBoxCore.getBActivityManager().onServiceDestroy(proxyIntent, BlackBoxCore.getUserId());
                     mService.remove(new Intent.FilterComparison(intent));
                 }
@@ -200,6 +238,7 @@ public class AppServiceDispatcher {
             try {
                 if (destroy) {
                     mHandler.post(() -> record.getService().onDestroy());
+                    removeForegroundService(new Intent.FilterComparison(intent));
                     BlackBoxCore.getBActivityManager().onServiceDestroy(intent, BlackBoxCore.getUserId());
                     mService.remove(new Intent.FilterComparison(intent));
                 }
